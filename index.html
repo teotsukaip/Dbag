@@ -65,54 +65,77 @@
         document.getElementById("loading-overlay")?.classList.add("hidden");
       };
 
+      const isCameraVideo = (el) =>
+        el && el.tagName === "VIDEO" && el.id !== "ar-video";
+
       const revealWhenCameraLive = (cameraVideo) => {
+        // MindAR puts the camera at z-index:-2, which hides it behind
+        // the container / canvas. Keep it under the WebGL layer only.
+        cameraVideo.style.zIndex = "0";
+        cameraVideo.style.opacity = "1";
+        cameraVideo.muted = true;
+        cameraVideo.playsInline = true;
+
         const reveal = () => hideLoadingOverlay();
-        if (cameraVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          reveal();
-          return;
-        }
         cameraVideo.addEventListener("playing", reveal, { once: true });
         cameraVideo.addEventListener("loadeddata", reveal, { once: true });
+        if (cameraVideo.srcObject || cameraVideo.readyState >= 2) {
+          reveal();
+        }
+        const playPromise = cameraVideo.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {});
+        }
       };
 
       document.addEventListener("DOMContentLoaded", () => {
         const container = document.querySelector(".ar-container");
-        const existing = [...container.querySelectorAll("video")].find(
-          (el) => el.id !== "ar-video"
-        );
-        if (existing) {
-          revealWhenCameraLive(existing);
-          return;
-        }
+        const scene = document.querySelector("a-scene");
 
-        const observer = new MutationObserver(() => {
-          const cameraVideo = [...container.querySelectorAll("video")].find(
-            (el) => el.id !== "ar-video"
-          );
-          if (cameraVideo) {
-            revealWhenCameraLive(cameraVideo);
-            observer.disconnect();
+        const attachCamera = (cameraVideo) => {
+          if (!cameraVideo || cameraVideo.dataset.revealed) return;
+          cameraVideo.dataset.revealed = "true";
+          revealWhenCameraLive(cameraVideo);
+        };
+
+        const findCamera = () =>
+          [...container.querySelectorAll("video")].find(isCameraVideo);
+
+        attachCamera(findCamera());
+        const observer = new MutationObserver(() => attachCamera(findCamera()));
+        observer.observe(container, { childList: true, subtree: true });
+
+        scene.addEventListener("renderstart", () => {
+          const renderer = scene.renderer;
+          if (renderer) {
+            renderer.setClearColor(0x000000, 0);
           }
         });
-        observer.observe(container, { childList: true, subtree: true });
+        scene.addEventListener("arReady", hideLoadingOverlay);
+        scene.addEventListener("arError", hideLoadingOverlay);
       });
     </script>
     <style>
       html,
       body {
         margin: 0;
+        width: 100%;
+        height: 100%;
         background: #000;
       }
       .ar-container {
         overflow: hidden;
         position: absolute;
-        width: 100%;
-        height: 100%;
-        background: #000;
+        inset: 0;
+        background: transparent;
       }
       .ar-container a-scene,
+      .ar-container .a-canvas,
       .ar-container canvas {
         background: transparent !important;
+      }
+      .ar-container .a-canvas {
+        z-index: 1;
       }
       #loading-overlay {
         position: fixed;
