@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>MindAR Video</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <script>
+      // marker.jpg = 642 x 853 / generated_video.MP4 = 448 x 672
+      // MindAR: target width is 1, height follows the marker aspect ratio.
+      const MARKER_W = 1;
+      const MARKER_H = 853 / 642;
+      const VIDEO_ASPECT = 448 / 672;
+      const MARKER_ASPECT = 642 / 853;
+      const BG_COLOR = "#E1DFE2";
+
+      const videoW =
+        VIDEO_ASPECT > MARKER_ASPECT ? MARKER_W : MARKER_H * VIDEO_ASPECT;
+      const videoH =
+        VIDEO_ASPECT > MARKER_ASPECT ? MARKER_W / VIDEO_ASPECT : MARKER_H;
+
+      AFRAME.registerComponent("fit-marker-video", {
+        init: function () {
+          const bg = this.el.querySelector("#marker-bg");
+          const screen = this.el.querySelector("#marker-video");
+          bg.setAttribute("width", MARKER_W);
+          bg.setAttribute("height", MARKER_H);
+          bg.setAttribute("color", BG_COLOR);
+          bg.setAttribute("material", `shader: flat; color: ${BG_COLOR}`);
+          screen.setAttribute("width", videoW);
+          screen.setAttribute("height", videoH);
+
+          const video = document.querySelector("#ar-video");
+          video.muted = true;
+          video.defaultMuted = true;
+          video.volume = 0;
+          video.loop = true;
+          video.playsInline = true;
+          video.setAttribute("muted", "");
+          video.setAttribute("playsinline", "");
+          video.setAttribute("webkit-playsinline", "");
+
+          const tryPlay = () => {
+            const playPromise = video.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+              playPromise.catch(() => {
+                const resume = () => {
+                  video.play().catch(() => {});
+                  window.removeEventListener("pointerdown", resume);
+                };
+                window.addEventListener("pointerdown", resume);
+              });
+            }
+          };
+
+          this.el.addEventListener("targetFound", tryPlay);
+          this.el.addEventListener("targetLost", () => {
+            video.pause();
+          });
+        },
+      });
+    </script>
+    <style>
+      body {
+        margin: 0;
+      }
+      .ar-container {
+        overflow: hidden;
+        position: absolute;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ar-container">
+      <a-scene
+        mindar-image="imageTargetSrc: ./targets.mind; maxTrack: 1;"
+        color-space="sRGB"
+        renderer="colorManagement: true, physicallyCorrectLights"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: false"
+        embedded
+      >
+        <a-assets>
+          <video
+            id="ar-video"
+            src="./generated_video.MP4"
+            preload="auto"
+            loop
+            muted
+            playsinline
+            webkit-playsinline
+            crossorigin="anonymous"
+          ></video>
+        </a-assets>
+
+        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+        <a-entity mindar-image-target="targetIndex: 0" fit-marker-video>
+          <a-plane id="marker-bg" position="0 0 0" material="shader: flat"></a-plane>
+          <a-video
+            id="marker-video"
+            src="#ar-video"
+            position="0 0 0.001"
+            material="shader: flat"
+          ></a-video>
+        </a-entity>
+      </a-scene>
+    </div>
+  </body>
+</html>
